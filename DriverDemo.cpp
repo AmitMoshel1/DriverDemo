@@ -37,41 +37,34 @@ NTSTATUS DeviceControlHandler(PDEVICE_OBJECT DeviceObject, PIRP irp)
 		The IOCTL will receive an input buffer that will hold value which is a number of bytes of kernel paged-pool memory that will
 		be allocated through ExAllocatePool2()
 		*/
-
 		KdPrint(("[+] IOCTL_BUFFERED_METHOD has been invoked!!\n"));
-
+		auto InputBuffer = (ULONG*)irp->AssociatedIrp.SystemBuffer; // Buffered I/O input Buffer that holds the number of bytes to allocate
+		auto OutputBuffer = (CHAR*)irp->AssociatedIrp.SystemBuffer; // Buffered I/O output buffer that will return a sucess message after execution.
 		if (OutputBufferLength <= 0 || InputBufferLength < sizeof(ULONG))
+		{
+			status = STATUS_INSUFFICIENT_RESOURCES;
 			break;
-
-		auto InputBuffer = (ULONG*)irp->AssociatedIrp.SystemBuffer; // Buffer that holds the number of bytes to allocate
-		auto OutputBuffer = (CHAR*)irp->AssociatedIrp.SystemBuffer;
+		}
 		
 		ULONG NumberOfBytes = (ULONG)*InputBuffer;
 ;		KdPrint(("[*] DemoDriver::DeviceControlHandler: Number of bytes that's going to be allocated: %d\n", NumberOfBytes));
 
 		AllocatedPoolMemoryBuffered = ExAllocatePool2(POOL_FLAG_PAGED, NumberOfBytes, 'omeD');
 		KdPrint(("[+] DemoDriver::DeviceControlHandler: Memory was successfully allocated at address: 0x%p\n", AllocatedPoolMemoryBuffered));
-
 		sprintf(message, "IOCTL IOCTL_BUFFERED_METHOD (0x%x) was executed successfully!! allocated %d bytes at address: 0x%p\n", status, NumberOfBytes, AllocatedPoolMemoryBuffered);
 		information = (ULONG)strlen(message) + 1;
 		RtlCopyMemory(OutputBuffer, message, information);
-
 		break;
 	}
 
 	case IOCTL_DIRECT_METHOD:
 	{
-		/*
-		The IOCTL_DIRECT_METHOD performs the same thing as IOCTL_BUFFERED_METHOD but the output buffer will be transferred through Direct I/O
-		in IOCTLs the input buffer is also through Buffered I/O and is accessible through irp->AssociatedIrp.SystemBuffer 
-		*/
-		
 		KdPrint(("[+] IOCTL_DIRECT_METHOD has been invoked!!\n"));
-
-		if (OutputBufferLength <= 0 || InputBufferLength < sizeof(ULONG))
+		if (OutputBufferLength <= 0 || InputBufferLength < sizeof(ULONG)) {
+			status = STATUS_INSUFFICIENT_RESOURCES;
 			break;
-
-		auto InputBuffer = (ULONG*)irp->AssociatedIrp.SystemBuffer;
+		}
+		auto InputBuffer = (ULONG*)irp->AssociatedIrp.SystemBuffer;	//Input buffer is received in Buffered I/O method.
 		auto OutputBuffer = MmGetSystemAddressForMdlSafe(irp->MdlAddress, NormalPagePriority); //output buffer is in direct memory mapping through _MDL structure
 
 		ULONG NumberOfBytes = (ULONG)*InputBuffer;
@@ -83,7 +76,6 @@ NTSTATUS DeviceControlHandler(PDEVICE_OBJECT DeviceObject, PIRP irp)
 		sprintf(message, "IOCTL IOCTL_DIRECT_METHOD (0x%x) was executed successfully!! allocated %d bytes at address: 0x%p\n", status, NumberOfBytes, AllocatedPoolMemoryDirect);
 		information = (ULONG)strlen(message) + 1;
 		RtlCopyMemory(OutputBuffer, message, information);
-
 		break;
 	}
 
@@ -107,8 +99,8 @@ NTSTATUS DeviceControlHandler(PDEVICE_OBJECT DeviceObject, PIRP irp)
 VOID UnloadRoutine(PDRIVER_OBJECT DriverObject)
 {
 	UNICODE_STRING DeviceSymLink = RTL_CONSTANT_STRING(L"\\??\\DriverDemoDevice");
-
 	PDEVICE_OBJECT DevObj = DriverObject->DeviceObject;
+
 	IoDeleteDevice(DevObj);
 	KdPrint(("[+] DriverDemo::UnloadRoutine: Device deleted successfully!!\n"));
 
