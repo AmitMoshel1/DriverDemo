@@ -8,6 +8,7 @@ VOID UnloadRoutine(PDRIVER_OBJECT DriverObject);
 
 PVOID AllocatedPoolMemoryBuffered;
 PVOID AllocatedPoolMemoryDirect;
+PVOID AllocatedPoolMemoryNeither;
 
 NTSTATUS CreateClose(PDEVICE_OBJECT DeviceObject, PIRP irp)
 {
@@ -81,8 +82,38 @@ NTSTATUS DeviceControlHandler(PDEVICE_OBJECT DeviceObject, PIRP irp)
 
 	case IOCTL_METHOD_NEITHER:
 	{
-		KdPrint(("No input and output is expected to be received here!"));
-		break;
+		KdPrint(("[+] IOCTL_METHOD_NEITHER has been invoked!!\n"));
+		auto InputBuffer = (ULONG*)StackLocation->Parameters.DeviceIoControl.Type3InputBuffer;
+		if (InputBuffer == NULL || InputBufferLength == 0) 
+		{
+			status = STATUS_INVALID_PARAMETER;
+			KdPrint(("[-] DemoDriver::DeviceControlHandler: Invalid METHOD_NEITHER parameter received\n"));
+			/*;
+			sprintf(message, "[-] DemoDriver::DeviceControlHandler: Invalid METHOD_NEITHER parameter received\n");
+			information = (ULONG)strlen(message) + 1;
+			RtlCopyMemory()*/
+			break;
+		}
+		__try {
+			//ProbeForRead() checks if the given address is a valid user-mode address and can be used for reading
+			ProbeForRead(InputBuffer, InputBufferLength, sizeof(ULONG)); 
+			
+			ULONG NumberOfBytes = *((PULONG)InputBuffer);
+			KdPrint(("[*] DemoDriver::DeviceControlHandler: Number of bytes that's going to be allocated: %d\n", NumberOfBytes));
+
+			AllocatedPoolMemoryNeither = ExAllocatePool2(POOL_FLAG_PAGED, NumberOfBytes, 'omeD');
+			KdPrint(("[+] DemoDriver::DeviceControlHandler: Memory was successfully allocated at address: 0x%p\n", AllocatedPoolMemoryNeither));
+
+			sprintf(message, "IOCTL_METHOD_NEITHER (0x%x) was executed successfully!! allocated %d bytes at address: 0x%p", status, NumberOfBytes, AllocatedPoolMemoryNeither);
+			information = (ULONG)strlen(message) + 1;
+			RtlCopyMemory(InputBuffer, message, information);
+			break;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+			status = STATUS_INVALID_PARAMETER; // Throw an NTSTATUS code
+			break;
+		}
 	}
 	default:
 		status = STATUS_INVALID_DEVICE_REQUEST;
@@ -112,13 +143,17 @@ VOID UnloadRoutine(PDRIVER_OBJECT DriverObject)
 		KdPrint(("[+] DriverDemo::UnloadRoutine: Allocated Pool memory from Direct at address 0x%p was freed successfully!\n", AllocatedPoolMemoryDirect));
 		ExFreePool(AllocatedPoolMemoryDirect);
 	}
-
 	if (AllocatedPoolMemoryBuffered)
 	{
 		ExFreePool(AllocatedPoolMemoryBuffered);
 		KdPrint(("[+] DriverDemo::UnloadRoutine: Allocated Pool memory from Buffered at address 0x%p was freed successfully!\n", AllocatedPoolMemoryBuffered));
 	}
 
+	if (AllocatedPoolMemoryNeither)
+	{
+		ExFreePool(AllocatedPoolMemoryNeither);
+		KdPrint(("[+] DriverDemo::UnloadRoutine: Allocated Pool memory from Neither at address 0x%p was freed successfully!\n", AllocatedPoolMemoryNeither));
+	}
 	KdPrint(("[+] DriverDemo::UnloadRoutine: Unload routine was completed successfully!\n"));
 }
 
